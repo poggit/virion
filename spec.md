@@ -267,9 +267,10 @@ Each mapping contains the following attributs:
 | `src` | The vendor-dependent  virion identifier | Required |
 | `version` | A semver constraint for the virion version | Required |
 | `vendor` | The vendor URL for the virion | Default `https://poggit.pmmp.io/v.dl` |
-| Other attributes | Passed as GET parameters to the vendor | N/A |
+| Other attributes | String values passed as GET parameters when downloading the distributable | N/A |
 
-Virion distributables are expected to be downloadable from `${vendor}/${src}`.
+Virion distributables are expected to be downloadable from `${vendor}/${src}/${version}`,
+along with the GET parameters from other attributes.
 
 ## Shading tools
 A shading tool should perform the following operations to shade and inject a virion into a consumer:
