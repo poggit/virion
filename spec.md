@@ -25,8 +25,8 @@ containing the following attributes:
 | `authors` | false | The authors of the virion, only used for human-readable display in developer tools | list of strings | `[SOFe]` |
 | `antigen` | true | The antigen namespace | string | `poggit\libasynql` |
 | `version` | true | The version of the virion | string | `3.0.0`
-| `php` | Either `php` or `api` | The PHP versions required, assuming PHP is semver-compliant | `["5.6", "7.0"]` is compatible with PHP 5.6.\* and 7.\*.\* |
-| `api` | Either `php` or `api` | The PocketMine API version constraints, equivalent to `api` in plugin.yml for PocketMine plugins | `["3.0.0-ALPHA13, 3.0.0"]` |
+| `php` | Either `php` or `api` | The PHP versions required, assuming PHP is semver-compliant | string list | `["5.6", "7.0"]` is compatible with PHP 5.6.\* and 7.\*.\* |
+| `api` | Either `php` or `api` | The PocketMine API version constraints, equivalent to `api` in plugin.yml for PocketMine plugins | string list | `["3.0.0-ALPHA13, 3.0.0"]` |
 | `sharable` | false | The sharable namespace, if any | string | `sharable\poggit\libasynql` |
 
 ### PHP Code
