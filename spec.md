@@ -76,10 +76,10 @@ TODO
 ## Consumer
 A consumer must contain in root directory a `virion.yml` file in YAML format,
 containing a `libs` attribute, which is a list of mappings.
-Each mapping contains the following attributs:
+Each mapping contains the following attributes:
 
 | Name | Description | Required / Default value |
-| :---: | :---: | :---: | :---: |
+| :---: | :---: | :---: |
 | `src` | The vendor-dependent  virion identifier | Required |
 | `version` | A semver constraint for the virion version | Required |
 | `vendor` | The vendor URL for the virion | Default `https://poggit.pmmp.io/v.dl` |
