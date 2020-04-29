@@ -30,21 +30,63 @@ containing the following attributes:
 | `sharable` | false | The sharable namespace, if any | string | `sharable\poggit\libasynql` |
 
 ### PHP Code
+#### Non-sharable PHP code
 The non-sharable PHP code of a virion are placed under the `src` subdirectory in the root directory.
 Within the `src` subdirectory, all code must follow either PSR-0 or PSR-4 structure.
 All non-sharable namespace items must be under the antigen,
 so the existence of the nonempty subdirectory `src/${antigen}` is used as a predicate
 to determine whether PSR-0 or PSR-4 is adopted.
 
+Note that virion code must follow either PSR-0 or PSR-4 strictly **under all circumstances**
+other than those written directly in the entry file.
+That is, even if a class is only used inside a certain method of some other class,
+they must still not share the same file (even though autoloading is not required).
+<!--
+Nothing necessarily requires this yet,
+but for future compatibility reasons let's enforce this.
+For example, if the injector or runtime needs to check the file that declares a class for sanity check,
+there might be some problems if one file declares multiple classes.
+-->
+
+#### Sharable PHP code
 The sharable PHP code of a virion are placed under the `share` subdirectory in the root directory,
 with PSR-0 or PSR-4 structure determined by a similar predicate.
 
-Other than the rules for asset files (specified below),
-PHP code must not make any assumptions for the actual path they are placed in.
+#### Entry PHP code
+If the file `src/${antigen}/entry.php` (PSR-0) or `src/entry.php` (PSR-4) exists,
+the code inside would be loaded during consumer entry.
+Code in entry.php may assume its relative path to other files
+in `src/${antigen}/entry.php` (PSR-0) or `src/entry.php` (PSR-4),
+but not any other files.
 
+If further entry files are manually included from `entry.php`,
+they must also be placed inside `src/${antigen}` (PSR-0) or `src` (PSR-4).
+Conventionally, prefer file names in `snake_case` to distinguish from class files.
+
+#### Guaranteed and undefined assumptions
+Code in `src/${antigen}` (PSR-0) or `src` (PSR-4) may assume their relative path
+to other files also in the directory.
+Other than this, no assumption about the path of PHP files may be made.
+This includes:
+- whether `__FILE__` starts with `phar://`.
+	Virions may be loaded in source or injected form.
+- whether `__FILE__` contains `src/` somewhere.
+	Although this holds for most tools and most scenarios,
+	this is not guaranteed for future compatibility.
+- what class loader is used to load virion classes,
+	not even whether classes are loaded with the same class loader.
+	In threaded scenarios, some obvious assumptions may not hold.
+
+Entry files must expect that entry files are modified drastically,
+such as inserting new statements at the end of the file.
+Furthermore, entry files must not include a `__halt_compiler();` statement,
+and must not have a terminating `?>` tag anywhere.
+
+#### Namespace referencing
 Non-sharable PHP code must only reference its own namespace using syntactic references,
 as it is subject to refactor during shading.
 
+#### Ungated global resources
 Non-sharable PHP code must be aware that multiple instances of the same code,
 even if gated by a static property, might be loaded in the same PHP runtime.
 For example, if the virion registers stream wrapper
@@ -61,8 +103,8 @@ preserves its relative path to an asset file
 if the asset file is transitively under its parent directory, i.e. `src/path/to`.
 It is *undefined* whether and how shading tools would copy files
 under `src` but not under the `src/${antigen}` directory in PSR-0.
-Furthermore, it is *undefined* whether and how shading tools would copy files
-under non-PHP files or non-PSR-[0/4]-complaint under `sharable`.
+Furthermore, it is *undefined* whether and how shading tools would copy
+non-PHP files or non-PSR-[0/4]-compliant under `sharable`.
 However, shading tools would ignore all files under the project directory other than `virion.yml`, `src` and `sharable`.
 
 Unlike plugin resources, virions do *not* have a specific directory for assets.
@@ -71,7 +113,62 @@ All asset files are under `src` no matter in source form or compiled form.
 ## Virion distributable
 Virions are distributed as phar files with the following format:
 
-TODO
+### virion.yml
+The following fields always exist,
+using either values from the source virion.yml or the default values:
+- `name`
+- `description` (empty string if not declared)
+- `authors` (empty array if not declared)
+- `antigen`
+- `version`
+- `php` (`null` if unrestricted)
+- `api` (`null` if unrestricted)
+- `sharable` (`null` if not declared)
+
+### `src`
+All non-sharable files are placed in `src` under PSR-0 structure,
+regardless whether the source form uses PSR-4 structure.
+
+An `src/${antigen}/entry.php` is created regardless the source includes it or not.
+After all original statements are executed,
+the entry script executes equivalent code to the following in global context:
+```php
+$_VIRION_ANTIGENS = $_VIRION_ANTIGENS ?? [];
+$_VIRION_ANTIGENS[\antigen::class] = [
+	"name" => "virion name",
+	"version" => "virion version",
+	"shaded-psr-items" => [
+		// for each non-sharable PSR-item named antigen\Foo\Bar
+		"antigen\\Foo\\Bar" => \antigen\Foo\Bar::class,
+	],
+];
+
+$_VIRION_SHARABLE_MD5 = $_VIRION_SHARABLE_MD5 ?? [];
+// for each sharable PSR-item named shared\name\space\Foo\Bar
+// with "HASH" being the hex representation of its functional-md5 hash
+if(isset($_VIRION_SHARABLE_MD5[\share\name\space\Foo\Bar::class])) {
+	$other = $_VIRION_SHARABLE_MD5[\share\name\space\Foo\Bar::class];
+	if($other["H"] !== "HASH") {
+		throw new \CompileError(sprintf("Virion classloading conflict: " .
+				"Functionally inequivalent variants of %s are loaded by %s v%s and %s v%s respectively " .
+				"with functional hashes %s and %s"),
+			\share\name\space\Foo\Bar::class, "virion name", "virion version", $other["name"], $other["version"], "HASH", $other["H"]);
+	}
+} else {
+	$_VIRION_SHARABLE_MD5[\share\name\space\Foo\Bar::class] = [
+		"name" => "virion name",
+		"version" => "virion version",
+		"H" => "HASH",
+	];
+}
+```
+
+Note that after shading operation,
+`\antigen::class` would be changed into `\antibody::class`,
+which resolves into the antibody namespace,
+while `"antigen"` would remain the antigen namespace.
+
+All non-PSR files, including PHP files and asset files, are copied with relative paths to those in `src` preserved.
 
 ## Consumer
 A consumer must contain in root directory a `virion.yml` file in YAML format,
@@ -105,6 +202,15 @@ As of PHP 7.0, this includes the following:
 
 Note that global variables are not considered namespace items
 because they are namespace-insensitive.
+
+#### PSR item
+A "PSR item" is a namespace item with its own file
+as specified by the PSR-0 or PSR-4 standard.
+
+The following quote is taken from the PSR-4 standard:
+> The term “class” refers to classes, interfaces, traits, and other similar structures.
+
+A PSR item refers to the term "class" as specified by PSR-4.
 
 #### Transitively under
 A namespace item is considered "transitively under" a namespace `a\b\c`
@@ -171,6 +277,8 @@ function clean_tokens($declaration) {
 }
 ```
 
+The result of `H(A)` on namespace item `A` is called the "functional-`h` hash" of `A`.
+
 A more intuitive equivalent definition is that two namespace items are "functionally equivalent"
 if and only if they satisfy the following properties:
 - They have the same fully-qualified name and of the same item type
@@ -195,11 +303,14 @@ if and only if they satisfy the following properties:
 
 #### Syntactic reference
 A "syntactic reference" to a namespace item is
-either an absolutely named reference to the following BNF pattern:
+either an absolutely named reference
+or an unnamed references such as `self::class`, `parent::class`, etc.
+
+Absolutely named references are identified
+if their token stream, with whitespaces and comments striped, follows this BNF pattern:
 ```bnf
 (T_NAMESPACE | (T_USE (T_FUNCTION | T_CONST)?) | T_NS_SEPARATOR) (T_STRING T_NS_SEPARATOR)* T_STRING
 ```
-or unnamed references such as `self::class`, `parent::class`, etc.
 
 The following examples are syntactic references
 to the namespace item `poggit\libasynql\SqlResult`:
@@ -265,13 +376,16 @@ Conventionally, if the consumer is a virion, the antibody is `${consumer.antigen
 If the consumer is a plugin with main class `a\b\c\Main`, the antibody is `a\b\c\libs\${virion.antigen}`.
 
 #### Sharable
-If a namespace item with fully-qualified name `a\b\c\D` of a virion is "sharable",
-across all compatible or incompatible versions of this virion
+A PSR item with fully-qualified name `a\b\c\D` of a virion is "sharable"
+if across all compatible or incompatible versions of this virion
 where a namespace item with the fully-qualified name `a\b\c\D` exists,
-the corresponding items in such versions must be pairwise functionally identical,
+the corresponding items in such versions must be pairwise functionally equivalent,
 and must not reference or otherwise depend on any non-shareable namespace items of the same virion.
 Sharable namespace items are not to be shaded,
 and can be used as mutually compatible type hints.
+
+In version 2.0, sharable is only defined for PSR items.
+This definition may be extended to other namespace items in future compatible versions of this specification.
 
 #### Sharable namespace
 The "sharable namespace" of a virion
