@@ -1,0 +1,24 @@
+{
+    "name": "poggit/virion",
+    "description": "Poggit virion toolchain",
+    "version": "0.1.0",
+    "type": "library",
+    "require": {
+        "adhocore/cli": "^0.8.3",
+        "ext-yaml": "^2.1",
+        "composer/semver": "^3.0"
+    },
+    "license": "Apache-2.0",
+    "bin": ["virion"],
+    "autoload": {
+        "psr-4": {
+            "Poggit\\Virion\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "SOFe",
+            "email": "sofe2038@gmail.com"
+        }
+    ]
+}
