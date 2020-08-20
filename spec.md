@@ -56,7 +56,7 @@ with PSR-0 or PSR-4 structure determined by a similar predicate.
 If the file `src/${antigen}/entry.php` (PSR-0) or `src/entry.php` (PSR-4) exists,
 the code inside would be loaded during consumer entry.
 Code in entry.php may assume its relative path to other files
-in `src/${antigen}/entry.php` (PSR-0) or `src/entry.php` (PSR-4),
+in `src/${antigen}` (PSR-0) or `src` (PSR-4),
 but not any other files.
 
 If further entry files are manually included from `entry.php`,
@@ -69,13 +69,13 @@ to other files also in the directory.
 Other than this, no assumption about the path of PHP files may be made.
 This includes:
 - whether `__FILE__` starts with `phar://`.
-	Virions may be loaded in source or injected form.
+  Virions may be loaded in source or injected form.
 - whether `__FILE__` contains `src/` somewhere.
-	Although this holds for most tools and most scenarios,
-	this is not guaranteed for future compatibility.
+  Although this holds for most tools and most scenarios,
+  this is not guaranteed for future compatibility.
 - what class loader is used to load virion classes,
-	not even whether classes are loaded with the same class loader.
-	In threaded scenarios, some obvious assumptions may not hold.
+  not even whether classes are loaded with the same class loader.
+  In threaded scenarios, some obvious assumptions may not hold.
 
 Entry files must expect that entry files are modified drastically,
 such as inserting new statements at the end of the file.
@@ -130,36 +130,35 @@ All non-sharable files are placed in `src` under PSR-0 structure,
 regardless whether the source form uses PSR-4 structure.
 
 An `src/${antigen}/entry.php` is created regardless the source includes it or not.
-After all original statements are executed,
-the entry script executes equivalent code to the following in global context:
+The entry script executes equivalent code to the following in global context:
 ```php
 $_VIRION_ANTIGENS = $_VIRION_ANTIGENS ?? [];
 $_VIRION_ANTIGENS[\antigen::class] = [
-	"name" => "virion name",
-	"version" => "virion version",
-	"shaded-psr-items" => [
-		// for each non-sharable PSR-item named antigen\Foo\Bar
-		"antigen\\Foo\\Bar" => \antigen\Foo\Bar::class,
-	],
+  "name" => "virion name",
+  "version" => "virion version",
+  "shaded-psr-items" => [
+    // for each non-sharable PSR-item named antigen\Foo\Bar
+    "antigen\\Foo\\Bar" => \antigen\Foo\Bar::class,
+  ],
 ];
 
 $_VIRION_SHARABLE_MD5 = $_VIRION_SHARABLE_MD5 ?? [];
 // for each sharable PSR-item named shared\name\space\Foo\Bar
 // with "HASH" being the hex representation of its functional-md5 hash
 if(isset($_VIRION_SHARABLE_MD5[\share\name\space\Foo\Bar::class])) {
-	$other = $_VIRION_SHARABLE_MD5[\share\name\space\Foo\Bar::class];
-	if($other["H"] !== "HASH") {
-		throw new \CompileError(sprintf("Virion classloading conflict: " .
-				"Functionally inequivalent variants of %s are loaded by %s v%s and %s v%s respectively " .
-				"with functional hashes %s and %s"),
-			\share\name\space\Foo\Bar::class, "virion name", "virion version", $other["name"], $other["version"], "HASH", $other["H"]);
-	}
+  $other = $_VIRION_SHARABLE_MD5[\share\name\space\Foo\Bar::class];
+  if($other["H"] !== "HASH") {
+    throw new \CompileError(sprintf("Virion classloading conflict: " .
+        "Functionally inequivalent variants of %s are loaded by %s v%s and %s v%s respectively " .
+        "with functional hashes %s and %s"),
+      \share\name\space\Foo\Bar::class, "virion name", "virion version", $other["name"], $other["version"], "HASH", $other["H"]);
+  }
 } else {
-	$_VIRION_SHARABLE_MD5[\share\name\space\Foo\Bar::class] = [
-		"name" => "virion name",
-		"version" => "virion version",
-		"H" => "HASH",
-	];
+  $_VIRION_SHARABLE_MD5[\share\name\space\Foo\Bar::class] = [
+    "name" => "virion name",
+    "version" => "virion version",
+    "H" => "HASH",
+  ];
 }
 ```
 
@@ -167,6 +166,9 @@ Note that after shading operation,
 `\antigen::class` would be changed into `\antibody::class`,
 which resolves into the antibody namespace,
 while `"antigen"` would remain the antigen namespace.
+
+### `entry.php`
+This is a copy of the input `entry.php` with the `<?php` stripped.
 
 All non-PSR files, including PHP files and asset files, are copied with relative paths to those in `src` preserved.
 
@@ -177,7 +179,7 @@ Each mapping contains the following attributes:
 
 | Name | Description | Required / Default value |
 | :---: | :---: | :---: |
-| `src` | The vendor-dependent  virion identifier | Required |
+| `src` | The vendor-dependent virion identifier | Required |
 | `version` | A semver constraint for the virion version | Required |
 | `vendor` | The vendor URL for the virion | Default `https://poggit.pmmp.io/v.dl` |
 | Other attributes | String values passed as GET parameters when downloading the distributable | N/A |
@@ -185,10 +187,92 @@ Each mapping contains the following attributes:
 Virion distributables are expected to be downloadable from `${vendor}/${src}/${version}`,
 along with the GET parameters from other attributes.
 
-## Shading tools
-A shading tool should perform the following operations to shade and inject a virion into a consumer:
+Furthermore, the consumer can optionally create a `virion.local.yml`,
+containing a `libs` attribute, which is a mapping from string to string.
+The keys are in the format `${src}/${version}`,
+which refer to to the respective entries in the `virion.yml` `libs` attribute.
+The values are local file paths,
+which indicate that the toolchain shall use the local path instead of downloading from the vendor.
+This is intended for testing purposes.
 
-## Definition of terms
+## Tools
+### Virion compiler
+This tool compiles virion source into virion distributable.
+
+- Produce virion.yml with *all and only* required fields based on input virion.yml
+- Restructure all input src files into PSR-0
+- Restructure all input share files into PSR-0
+- Compute a sorted list of sharable and non-sharable items *only* based on PSR-0 filename
+- Perform the hash in the definition of "functional equivalence"
+  with `md5` (binary form) as the hash function and `^` (XOR) as the binary operator.
+  - If any hash returns null, produce an error on invalid sharable items
+- Generate an entry.php with code equivalent to specified above.
+- The input src/entry.php is copied to /entry.php inside the phar (rather than under src).
+
+The virion compiler is provided as the `virion compile` subcommand,
+accepting the directory containing `virion.yml` (for virion source) as its first argument.
+
+### Virion resolver
+This tool resolves virion dependencies in a source tree
+and stores them in a `virion_deps` directory.
+This directory shall be ignored in version control systms.
+
+The `virion_deps` directory contains a `lock.json` file,
+which lists all dependencies fetched by the tool in the following format:
+
+```typescript
+type LockJson = {
+  name: string
+  antigen: string
+  version: string
+  local: boolean
+  filename?: string
+}[]
+```
+
+For local file paths, `local` is set to true and `filename` is undefined.
+If the path refers to a virion source directory,
+this tool also triggers `virion compile` for the referenced path.
+
+Upon resolution, all unused listed dependency files are removed,
+and missing dependencies are installed.
+
+The virion resolver shall check for antigen collision after all virions are resolved.
+
+Each execution of the virion resolver generates a `.gitignore` file in `virion_deps` ignoring `*.phar` and `.gitignore`.
+
+The virion resolver is provided as the `virion resolve` subcommand,
+accepting the directory containing `virion.yml` (for consumer) as its first argument.
+
+### Virion injector
+The virion injector takes a virion distributable and a consumer phar as input,
+performing injection that modifies the consumer phar.
+
+The virion injector depends on a `virion.yml` inside the consumer phar.
+This file is not removed after removal.
+
+The virion injector is provided as the `virion inject` subcommand,
+accepting the virion distributable as the first argument
+and the consumer phar as the second argument.
+
+### Full toolchain
+For plugins, the full toolchain (along with plugin compilation in general)
+is simplified to the `virion build` subcommand.
+accepting the directory containing `virion.yml` (for consumer) as its first argument.
+
+If plugin structure is detected,
+this tool triggers a plugin source-to-phar tool (based on ConsoleScript),
+then `virion resolve`,
+then `virion inject` on each dependency.
+
+If virion structure is detected,
+this tool triggers `virion compile`,
+then `virion resolve`,
+then `virion inject` on each dependency.
+
+Other unknown formats are not supported.
+
+## Definitions
 ### PHP
 #### Namespace item
 A "namespace item" is an element of the PHP language
@@ -222,58 +306,58 @@ for all deterministic function `h: mixed -> T` and deterministic binary operator
 the following algorithm `H` results in `H(A) === H(B)` and `H(A) !== null`:
 ```
 algorithm H($item) {
-	if($item is a trait or a function) {
-		return null;
-	}
+  if($item is a trait or a function) {
+    return null;
+  }
 
-	$output = h(fully-qualified name of $item);
+  $output = h(fully-qualified name of $item);
 
-	if($item is a class) {
-		$output ^= h("class");
-		if($item is abstract) $output ^= h("abstract");
-		if($item is final) $output ^= h("final");
-	}
+  if($item is a class) {
+    $output ^= h("class");
+    if($item is abstract) $output ^= h("abstract");
+    if($item is final) $output ^= h("final");
+  }
 
-	if($item is an interface) {
-		$output ^= h("interface");
-	}
+  if($item is an interface) {
+    $output ^= h("interface");
+  }
 
-	if($item is a class or an interface) {
-		$array = [];
-		foreach(constants in $item as $constant) {
-			$array[name of $constant] = clean_tokens($constant);
-		}
-		foreach(class properties in $item as $property) {
-			$array[name of $property] = clean_tokens($property);
-		}
-		foreach(methods in $item as $method) {
-			$array[name of $method] = clean_tokens($method);
-		}
-		ksort($array);
-		$output ^= h($array);
-	}
+  if($item is a class or an interface) {
+    $array = [];
+    foreach(constants in $item as $constant) {
+      $array[name of $constant] = clean_tokens($constant);
+    }
+    foreach(class properties in $item as $property) {
+      $array[name of $property] = clean_tokens($property);
+    }
+    foreach(methods in $item as $method) {
+      $array[name of $method] = clean_tokens($method);
+    }
+    ksort($array);
+    $output ^= h($array);
+  }
 
-	if($item is a constant) {
-		$output ^= clean_tokens($item);
-	}
+  if($item is a constant) {
+    $output ^= clean_tokens($item);
+  }
 
-	return $output;
+  return $output;
 }
 
 function clean_tokens($declaration) {
-	$tokens = token_get_all($declaration);
-	$output = h(null);
-	foreach($tokens as $token) {
-		if(is_array($token)) {
-			if(!in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT])) {
-				$output ^= h($token[0]);
-				$output ^= h(trim($token[1]));
-			}
-		} else {
-			$output ^= h($token);
-		}
-	}
-	return $output;
+  $tokens = token_get_all($declaration);
+  $output = h(null);
+  foreach($tokens as $token) {
+    if(is_array($token)) {
+      if(!in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT])) {
+        $output ^= h($token[0]);
+        $output ^= h(trim($token[1]));
+      }
+    } else {
+      $output ^= h($token);
+    }
+  }
+  return $output;
 }
 ```
 
@@ -282,23 +366,23 @@ The result of `H(A)` on namespace item `A` is called the "functional-`h` hash" o
 A more intuitive equivalent definition is that two namespace items are "functionally equivalent"
 if and only if they satisfy the following properties:
 - They have the same fully-qualified name and of the same item type
-	(e.g. both are classes, both are interfaces, etc.).
+  (e.g. both are classes, both are interfaces, etc.).
 - Two functions are *never* functionally equivalent.
 - If they are both constants, they must be defined using the `const XXX = value;` syntax
-	(instead of the `define()` syntax),
-	and the value declaration must be "token-identical"
-	(i.e. they must have the identical order of non-whitespace non-(doc)comment tokens).
-	For example, `const THREE = 1+2;`, `const THREE = 0x1+0x2;` and `const THREE = 2+1;`
-	are pairwise *not* token-identical,
-	while `const THREE = 1+2;` and `/** three */ const THREE=1 + 2;` are token-identical.
-	Furthermore, token-identical is alias-sensitive,
-	i.e. `const EOL = PHP_EOL;` and `const EOL = \PHP_EOL;` are *not* token-identical.
+  (instead of the `define()` syntax),
+  and the value declaration must be "token-identical"
+  (i.e. they must have the identical order of non-whitespace non-(doc)comment tokens).
+  For example, `const THREE = 1+2;`, `const THREE = 0x1+0x2;` and `const THREE = 2+1;`
+  are pairwise *not* token-identical,
+  while `const THREE = 1+2;` and `/** three */ const THREE=1 + 2;` are token-identical.
+  Furthermore, token-identical is alias-sensitive,
+  i.e. `const EOL = PHP_EOL;` and `const EOL = \PHP_EOL;` are *not* token-identical.
 - If they are both classes or both interfaces,
-	their contents must be token-identical,
-	except the order of items can be swapped
-	(but must have the same unordered set of items).
-	In particular, the names of interface method arguments must be identical,
-	and the aliases used for types must be identical.
+  their contents must be token-identical,
+  except the order of items can be swapped
+  (but must have the same unordered set of items).
+  In particular, the names of interface method arguments must be identical,
+  and the aliases used for types must be identical.
 - Two traits are *never* functionally equivalent.
 
 #### Syntactic reference
